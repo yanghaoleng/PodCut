@@ -1,3 +1,5 @@
+import {privacyBuffer, type PrivacyMaskStyle} from './privacyMask';
+import { channelGains,trackDbToLinear } from './channelMix';
 /**
  * Build a mixed speech + bed + stinger schedule on a project edit timeline.
  *
@@ -11,14 +13,21 @@ import type { MusicPlacement, TimeRange, Word } from '../edit/types';
 import { dbToLinear } from './gain';
 
 export interface ScheduleClip {
+  privacyRanges?: TimeRange[];
+  privacyMaskStyle?: PrivacyMaskStyle;
   id: string;
   buffer: AudioBuffer;
   ranges: TimeRange[];
   words?: Word[];
   gainDb?: number;
+  channelTracks?: Array<{channel:number;gainDb:number;muted?:boolean}>;
+  syncedTracks?: Array<{id:string;buffer:AudioBuffer;gainDb:number;muted?:boolean}>;
 }
 
 export interface MixSource {
+  privacyTone?: PrivacyMaskStyle;
+  channelGains?: number[];
+  laneId?: string;
   buffer: AudioBuffer;
   /** Start time on the project (mixed) edit timeline. */
   whenEdit: number;
@@ -175,6 +184,9 @@ export function resolveMusicAnchorTime(clips: ScheduleClip[], m: MusicPlacement)
 }
 
 interface SpeechAtom {
+  privacyTone?: PrivacyMaskStyle;
+  channelGains?:number[];
+  syncedTracks?:ScheduleClip['syncedTracks'];
   buffer: AudioBuffer;
   bufStart: number;
   dur: number;
@@ -186,17 +198,18 @@ function flattenSpeech(clips: ScheduleClip[]): SpeechAtom[] {
   const out: SpeechAtom[] = [];
   let speechT = 0;
   for (const c of clips) {
+    const masks=(c.privacyRanges??[]).filter(r=>Number.isFinite(r.start)&&Number.isFinite(r.end)&&r.end>r.start);
     for (const r of c.ranges) {
-      const dur = r.end - r.start;
-      if (dur <= 1e-4) continue;
-      out.push({
-        buffer: c.buffer,
-        bufStart: r.start,
-        dur,
-        speechStart: speechT,
-        gainLinear: dbToLinear(c.gainDb ?? 0),
-      });
-      speechT += dur;
+      const points=[r.start,...masks.flatMap(m=>[m.start,m.end]).filter(t=>t>r.start&&t<r.end),r.end].sort((a,b)=>a-b);
+      for(let i=0;i<points.length-1;i++){
+        const start=points[i]!,end=points[i+1]!,dur=end-start;
+        if(dur<=1e-9)continue;
+        const masked=masks.some(m=>m.start<end&&m.end>start);
+        out.push({buffer:c.buffer,channelGains:channelGains(c.channelTracks,c.buffer.numberOfChannels),
+          syncedTracks:c.syncedTracks,privacyTone:masked?(c.privacyMaskStyle??'bleep'):undefined,
+          bufStart:start,dur,speechStart:speechT,gainLinear:dbToLinear(c.gainDb??0)});
+        speechT+=dur;
+      }
     }
   }
   return out;
@@ -218,6 +231,7 @@ function splitAtPoints(atoms: SpeechAtom[], points: number[]): SpeechAtom[] {
       if (cut <= start + 1e-9 || cut >= end - 1e-9) continue;
       const left = cut - start;
       out.push({
+        ...atom,
         buffer: atom.buffer,
         gainLinear: atom.gainLinear,
         bufStart: buf,
@@ -230,6 +244,7 @@ function splitAtPoints(atoms: SpeechAtom[], points: number[]): SpeechAtom[] {
     }
     if (remaining > 1e-4) {
       out.push({
+        ...atom,
         buffer: atom.buffer,
         gainLinear: atom.gainLinear,
         bufStart: buf,
@@ -389,6 +404,9 @@ export function buildMixSchedule(
     for (const atom of atoms) {
       emitStingersAt(atom.speechStart);
       const start = projectT;
+      if(atom.privacyTone){
+        sources.push({buffer:privacyBuffer(atom.privacyTone,atom.dur,atom.buffer.sampleRate),whenEdit:start,offset:0,duration:atom.dur,gainLinear:masterLinear,role:'speech',laneId:'privacy',privacyTone:atom.privacyTone});
+      }else{
       sources.push({
         buffer: atom.buffer,
         whenEdit: start,
@@ -396,7 +414,15 @@ export function buildMixSchedule(
         duration: atom.dur,
         gainLinear: masterLinear * atom.gainLinear,
         role: 'speech',
+        channelGains:atom.channelGains,
+        laneId:'primary',
       });
+      for(const track of atom.syncedTracks??[]){
+        if(track.muted)continue;
+        const duration=Math.min(atom.dur,Math.max(0,track.buffer.duration-atom.bufStart));
+        if(duration>1e-4)sources.push({buffer:track.buffer,whenEdit:start,offset:atom.bufStart,duration,gainLinear:masterLinear*trackDbToLinear(track.gainDb),role:'speech',laneId:'synced:'+track.id});
+      }
+      }
       segs.push({
         projectStart: start,
         projectEnd: start + atom.dur,
@@ -429,7 +455,7 @@ export function buildMixSchedule(
     ...sources.map((s) => s.whenEdit + s.duration),
   );
 
-  return { sources, segs, totalDuration, speechDuration, hasClipGain: clips.some(c => Math.abs(c.gainDb ?? 0) > 1e-9) };
+  return { sources, segs, totalDuration, speechDuration, hasClipGain: clips.some(c => Math.abs(c.gainDb ?? 0) > 1e-9 || !!c.channelTracks?.length || !!c.syncedTracks?.length || !!c.privacyRanges?.length) };
 }
 
 /**

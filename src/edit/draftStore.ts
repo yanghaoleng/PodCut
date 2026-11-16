@@ -14,6 +14,8 @@ import { loadDiskDraft, saveDiskDraft } from './draftDisk';
 
 import type {
   MusicKind,
+  ChannelTrack,
+  PrivacyMaskStyle,
   MusicPlacement,
   ProjectState,
   TimeRange,
@@ -42,7 +44,15 @@ export interface DraftSourceAudio {
   blob: Blob;
 }
 
+export interface DraftSyncedAudioTrack {
+  id: string; name: string; gainDb: number; muted?: boolean; duration: number;
+  source?: DraftSourceAudio; buffer?: SerializedBuffer;
+}
 export interface DraftClip {
+  privacyRanges?: TimeRange[];
+  privacyMaskStyle?: PrivacyMaskStyle;
+  channelTracks?: ChannelTrack[];
+  syncedTracks?: DraftSyncedAudioTrack[];
   legacyDeletionRepairVersion?: number;
   id: string;
   name: string;
@@ -344,6 +354,7 @@ async function loadIdbBlobMap(keys: string[]): Promise<Map<string, BlobRow>> {
  */
 export async function saveDraftPayload(payload: DraftPayload): Promise<void> {
   if (await saveDiskDraft(payload)) return;
+  if (payload.clips.some(c => c.syncedTracks?.length)) throw new Error("同步多音轨需要本机草稿服务，请启动 PodCut 后再保存，原工程未覆盖");
   const idbBlobs: BlobRow[] = [];
   const keepIdb = new Set<string>();
   const keepOpfs = new Set<string>();
@@ -359,6 +370,10 @@ export async function saveDraftPayload(payload: DraftPayload): Promise<void> {
       ranges: c.ranges,
       audioOrder: c.audioOrder,
       gainDb: c.gainDb ?? 0,
+      privacyRanges: c.privacyRanges?.map(t => ({...t})),
+      privacyMaskStyle: c.privacyMaskStyle,
+      channelTracks: c.channelTracks?.map(t => ({...t})),
+      syncedTracks: c.syncedTracks?.map(t => ({...t})),
       denoised: c.denoised,
       beautified: c.beautified,
       clearedPauses: c.clearedPauses,
@@ -557,7 +572,7 @@ export async function loadDraftPayload(): Promise<DraftPayload | null> {
         if (c.sourceBytes && file.size !== c.sourceBytes) {
           console.warn('OPFS size mismatch', c.id, file.size, c.sourceBytes);
         }
-        clips.push({
+            clips.push({
           ...c,
           source: {
             mime: (file as File).type || 'application/octet-stream',
@@ -570,7 +585,7 @@ export async function loadDraftPayload(): Promise<DraftPayload | null> {
     if (c.sourceBlobKey) {
       const br = blobMap.get(c.sourceBlobKey);
       if (br) {
-        clips.push({
+            clips.push({
           ...c,
           source: { mime: br.mime, blob: br.blob },
         });
@@ -629,6 +644,9 @@ export async function verifyDraftSources(draft: DraftPayload): Promise<{
   ok: boolean;
   detail: string;
 }> {
+  for (const c of draft.clips) for (const t of c.syncedTracks ?? []) {
+    if (!t.source?.blob?.size && !t.buffer?.channels?.length) return {ok:false,detail:`同步音轨无音频：${t.name}`};
+  }
   for (const c of draft.clips) {
     const expected = c.sourceBytes || c.source?.blob?.size || 0;
     if (c.clean && c.current && !expected) continue;
@@ -740,6 +758,7 @@ export function estimateDraftBytes(payload: DraftPayload): number {
     else if (c.sourceBytes) n += c.sourceBytes;
     if (c.clean) n += c.clean.length * c.clean.numberOfChannels * 4;
     if (c.current) n += c.current.length * c.current.numberOfChannels * 4;
+    for (const t of c.syncedTracks ?? []) n += t.source?.blob?.size || (t.buffer ? t.buffer.length*t.buffer.numberOfChannels*4 : 0);
     n += JSON.stringify(c.words).length;
   }
   for (const m of payload.music) {
@@ -762,6 +781,10 @@ export function slimDraftForQuota(payload: DraftPayload): DraftPayload {
         ranges: c.ranges,
       audioOrder: c.audioOrder,
         gainDb: c.gainDb ?? 0,
+      privacyRanges: c.privacyRanges?.map(t => ({...t})),
+      privacyMaskStyle: c.privacyMaskStyle,
+      channelTracks: c.channelTracks?.map(t => ({...t})),
+      syncedTracks: c.syncedTracks?.map(t => ({...t})),
       denoised: c.denoised,
         beautified: c.beautified,
         clearedPauses: c.clearedPauses,
@@ -847,6 +870,11 @@ export function projectToDraft(opts: {
         ranges: c.ranges.map((r) => ({ ...r })),
       audioOrder: c.audioOrder?.map(r => ({...r})),
         gainDb: c.gainDb ?? 0,
+      privacyRanges: c.privacyRanges?.map(t => ({...t})),
+      privacyMaskStyle: c.privacyMaskStyle,
+      channelTracks: c.channelTracks?.map(t => ({...t})),
+      syncedTracks: c.syncedTracks?.map(t => ({id:t.id,name:t.name,gainDb:t.gainDb,muted:t.muted,duration:t.buffer.duration,
+        ...(t.sourceBlob?.size ? {source:{mime:t.sourceMime || t.sourceBlob.type || 'application/octet-stream',blob:t.sourceBlob}} : {buffer:serializeAudioBuffer(t.buffer)})})),
       denoised: c.denoised,
         beautified: c.beautified,
         clearedPauses: (c.clearedPauses ?? []).map((p) => ({ ...p })),
@@ -992,6 +1020,13 @@ export async function draftToProject(
       continue;
     }
 
+    const syncedTracks = [];
+    for (const t of c.syncedTracks ?? []) {
+      let trackBuffer: AudioBuffer;
+      try { trackBuffer = t.source?.blob?.size ? await readSource(t.source) : t.buffer ? deserializeAudioBuffer(t.buffer) : (()=>{throw Error('缺少音频')})(); }
+      catch (e) { throw new Error(`同步音轨「${t.name}」无法恢复；请检查素材，未静默丢弃此轨：${e instanceof Error?e.message:String(e)}`); }
+      syncedTracks.push({id:t.id,name:t.name,gainDb:t.gainDb,muted:t.muted,buffer:trackBuffer,sourceBlob:t.source?.blob,sourceMime:t.source?.mime});
+    }
     clips.push({
       id: c.id,
       name: c.name,
@@ -999,6 +1034,10 @@ export async function draftToProject(
       words: c.words.map((w) => ({ ...w })),
       ranges: c.ranges.map((r) => ({ ...r })),
       audioOrder: c.audioOrder?.map(r => ({...r})),
+      privacyRanges: c.privacyRanges?.map(t => ({...t})),
+      privacyMaskStyle: c.privacyMaskStyle,
+      channelTracks: c.channelTracks?.map(t => ({...t})),
+      syncedTracks,
       gainDb: (c.gainDb ?? 0) + (Number.isFinite(draft.gainDb) ? draft.gainDb : 0),
       denoised: c.denoised,
       beautified: c.beautified,

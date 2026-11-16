@@ -10,11 +10,8 @@ app.className = 'project-home';
 document.title = '历史剪辑 · PodCut';
 app.innerHTML = `
   <header class="home-topbar">
-    <a class="home-brand" href="/" aria-label="PodCut 主页"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="brand-name">PodCut</span></a>
-    <div class="theme-switch" role="group" aria-label="界面主题">
-      <button type="button" class="theme-choice" data-theme-choice="light" aria-label="明亮" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.1"/><path d="M10 1.7v1.5m0 13.6v1.5M1.7 10h1.5m13.6 0h1.5M4.1 4.1l1.1 1.1m9.6 9.6 1.1 1.1M4.1 15.9l1.1-1.1m9.6-9.6 1.1-1.1"/></svg><span>明亮</span></button>
-      <button type="button" class="theme-choice" data-theme-choice="dark" aria-label="深夜" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M17 11.1A7.2 7.2 0 0 1 8.9 3a7.2 7.2 0 1 0 8.1 8.1Z"/></svg><span>深夜</span></button>
-    </div>
+    <a class="home-brand" href="/" aria-label="PodCut 主页"><picture class="brand-icon"><source srcset="/brand/podkit-dark.png" media="(prefers-color-scheme: dark)"><img src="/brand/podkit-light.png" alt="" width="34" height="34"></picture><span class="brand-name">PodCut</span></a>
+
   </header>
   <main class="home-content">
     <div class="home-heading"><div><h1>历史剪辑</h1><p>每一期的进度，都会留在这里。</p></div><button class="btn btn-primary" id="new-project">＋ 新建剪辑</button></div>

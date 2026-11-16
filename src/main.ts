@@ -311,7 +311,7 @@ app.className = "shell";
 app.innerHTML = `
   <header class="topbar">
     <div class="topbar-brand">
-      <span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><h1 class="brand-name">PodCut</h1>
+      <picture class="brand-icon"><source srcset="/brand/podkit-dark.png" media="(prefers-color-scheme: dark)"><img src="/brand/podkit-light.png" alt="" width="34" height="34"></picture><h1 class="brand-name">PodCut</h1>
       <span class="sub">播客剪辑工作台</span>
     </div>
     <div class="topbar-actions">
@@ -336,10 +336,7 @@ app.innerHTML = `
       <button type="button" class="btn btn-icon" id="btn-help" title="帮助与说明" aria-expanded="false">?</button>
       <button type="button" class="btn btn-ghost btn-sm rail-toggle" id="btn-rail-toggle" title="片段/素材">左栏</button>
       <button type="button" class="btn btn-ghost btn-sm insp-toggle" id="btn-insp-toggle" title="效果面板">效果</button>
-      <div class="theme-switch" role="group" aria-label="界面主题">
-        <button type="button" class="theme-choice" data-theme-choice="light" aria-label="明亮" aria-pressed="false" title="明亮版"><svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.1"/><path d="M10 1.7v1.5m0 13.6v1.5M1.7 10h1.5m13.6 0h1.5M4.1 4.1l1.1 1.1m9.6 9.6 1.1 1.1M4.1 15.9l1.1-1.1m9.6-9.6 1.1-1.1"/></svg><span>明亮</span></button>
-        <button type="button" class="theme-choice" data-theme-choice="dark" aria-label="深夜" aria-pressed="false" title="深夜版"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M17 11.1A7.2 7.2 0 0 1 8.9 3a7.2 7.2 0 1 0 8.1 8.1Z"/></svg><span>深夜</span></button>
-      </div>
+
     </div>
   </header>
 
@@ -506,9 +503,15 @@ app.innerHTML = `
   </main>
 
   <aside class="inspector" id="inspector"><div class="section-eyebrow">剪辑工具</div>
+    <details class="insp-group" open><summary>隐私遮音</summary><div class="insp-body">
+      <label for="privacy-style">全工程遮音声音</label>
+      <select id="privacy-style" aria-label="全工程隐私遮音"><option value="bleep">哔声</option><option value="bird">鸟叫</option><option value="low">低沉嘟声</option><option value="silence">静默</option></select>
+      <p class="hint" id="privacy-status" role="status"></p>
+    </div></details>
     <details class="insp-group" id="word-rail-group" open>
       <summary>字音轨 · 边界精修</summary><div class="alignment-controls"><button type="button" class="btn btn-sm btn-ghost" id="btn-cancel-alignment" hidden>取消</button><span class="hint" id="alignment-status" role="status">原音 + 文字逐字对齐</span></div><p class="word-rail-empty hint" id="word-rail-empty">点击文稿中的任意字，在这里查看原音波形、试听并调整边界。</p>
       <div class="insp-body word-rail" id="word-rail" hidden>
+        <p class="hint">此处波形与试听仅为主录音原音，可能含未遮蔽的隐私，不含独立轨增益、静音、同步音轨、隐私遮音和配乐；听最终混音请用顶部播放。</p>
         <div class="word-rail-head">
           <strong id="word-rail-label">—</strong>
           <span class="hint" id="word-rail-meta"></span>
@@ -555,6 +558,20 @@ app.innerHTML = `
           <label class="playback-speed" title="输入 0.5–2 倍，可自由设置。应用于全期人声试听与导出，不改变音调；插入音乐始终原速。"><span>人声倍速</span><span class="speed-field"><input id="playback-speed" type="number" min="0.5" max="2" step="0.01" value="1" inputmode="decimal" aria-label="人声播放速度" /><span aria-hidden="true">×</span></span></label>
           <p class="hint speed-scope">全期人声 · 试听与导出 · 配乐原速</p>
         </div>
+      </div>
+    </details>
+    <details class="insp-group" id="channel-tracks-group" open>
+      <summary>独立人声音轨</summary>
+      <div class="insp-body">
+        <p class="hint processing-target" id="channel-tracks-target">先选择一个片段</p>
+        <div id="channel-tracks-list"></div>
+        <div id="synced-tracks-list"></div>
+        <input type="file" id="file-synced-track" class="file-input" accept="audio/*,.wav,.mp3,.m4a,.webm" multiple />
+        <button type="button" class="btn btn-block" id="btn-import-synced-track" disabled>导入同步音轨</button>
+        <p class="hint" id="synced-tracks-status" role="status">附加音轨从当前片段原音 0 秒同步开始，共享所有删字；短于原音则尾部静音，超出部分不播放。不调用转写服务。</p>
+        <button type="button" class="btn btn-block" id="btn-split-channels" disabled>启用左右声道独立调音</button>
+        <button type="button" class="btn btn-block" id="btn-link-channel-settings" hidden>应用到全部人声片段</button>
+        <p class="hint">两条声道共享删字、停顿和剪辑位置，不会错位；音量与静音分别调整。这里只分开已有声道，不会自动分离串音。背景音乐仍单独调整。</p>
       </div>
     </details>
     <details class="insp-group" id="speaker-group">
@@ -868,7 +885,8 @@ function clipSnapshot(clip) {
     audioOrder: clip.audioOrder,
     duration: clip.duration,
     manualPauses: clip.manualPauses ?? [],
-    clearedPauses: clip.clearedPauses ?? []
+    clearedPauses: clip.clearedPauses ?? [],
+    privacyStyles: project?.clips.map(c=>({clipId:c.id,style:c.privacyMaskStyle})) ?? []
   };
 }
 function pushUndo(clip) {
@@ -899,7 +917,10 @@ function syncEngineFromProject(opts) {
     buffer: c.buffer,
     ranges: c.ranges,
     words: c.words,
-    gainDb: c.gainDb ?? 0
+    gainDb: c.gainDb ?? 0,
+    channelTracks: c.channelTracks,
+    syncedTracks: c.syncedTracks,
+    privacyRanges: c.privacyRanges, privacyMaskStyle: c.privacyMaskStyle
   }));
   const mix = buildMixSchedule(scheduleClips, project.music, master);
   engine.setMixSchedule(mix);
@@ -975,6 +996,9 @@ function syncChrome() {
   syncBeautifyButton();
 }
 function syncDenoiseButton() {
+  renderPrivacyInspector();
+  renderChannelTrackInspector();
+  renderSyncedTrackInspector();
   renderSpeakerInspector();
   const clip = getActiveClip();
   syncGainUi(clip?.gainDb ?? 0);
@@ -993,6 +1017,173 @@ function syncDenoiseButton() {
   el.denoise.classList.toggle("is-on", clip.denoised);
   el.denoise.setAttribute("aria-pressed", clip.denoised ? "true" : "false");
 }
+function formatTrackGainDb(db) {
+  const n = Number.isFinite(db) ? Math.max(-60, Math.min(12, db)) : 0;
+  return `${n > 0 ? '+' : ''}${n.toFixed(1)} dB`;
+}
+let channelTrackPanelKey = '';
+
+function renderPrivacyInspector(){
+ const select=document.querySelector('#privacy-style');
+ const status=document.querySelector('#privacy-status');
+ const clips=project?.clips??[];
+ const count=clips.reduce((n,c)=>n+(c.privacyRanges?.length??0),0);
+ select.disabled=!clips.length||!count;
+ select.value=clips.find(c=>c.privacyRanges?.length)?.privacyMaskStyle??'bleep';
+ const styles=new Set(clips.filter(c=>c.privacyRanges?.length).map(c=>c.privacyMaskStyle??'bleep'));
+ status.textContent=count?`已识别 ${count} 个非破坏式遮音标记。修改应用全部片段，预览与导出一致，可撤销。${styles.size>1?'当前片段音色不一致，选择后将统一。':''}`:'没有可替换的遮音标记。已烧入旧音频的哔声不会被此选项替换，需要使用原音与独立标记工程。';
+}
+document.querySelector('#privacy-style').addEventListener('change',event=>{
+ const style=event.target.value;
+ if(!['bleep','bird','low','silence'].includes(style)||!project?.clips.length)return;
+ const clip=getActiveClip()??project.clips[0];
+ pushUndo(clip);
+ for(const item of project.clips)item.privacyMaskStyle=style;
+ syncEngineFromProject();syncChrome();scheduleDraftSave();
+ toast('已更改全工程遮音声音，可撤销');
+});
+
+function renderChannelTrackInspector() {
+  const clip = getActiveClip();
+  const count = clip?.buffer?.numberOfChannels ?? 0;
+  const tracks = clip?.channelTracks ?? [];
+  const target = document.querySelector('#channel-tracks-target');
+  target.textContent = clip ? `当前片段「${clip.name}」 · ${count} 声道` : '先选择一个片段';
+  const split = document.querySelector('#btn-split-channels');
+  split.hidden = tracks.length > 0;
+  split.disabled = count < 2;
+  split.textContent = count === 1 ? '当前是单声道，不能分出两位人声' : '启用左右声道独立调音';
+  const apply = document.querySelector('#btn-link-channel-settings');
+  apply.hidden = tracks.length === 0 || (project?.clips.length ?? 0) < 2;
+  const key = JSON.stringify([clip?.id, count, tracks]);
+  if (key === channelTrackPanelKey) return;
+  channelTrackPanelKey = key;
+  const list = document.querySelector('#channel-tracks-list');
+  list.replaceChildren();
+  for (const track of tracks) {
+    const row = document.createElement('div');
+    row.className = 'channel-track-row';
+    row.style.cssText = 'display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--border,#ddd)';
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;gap:8px;align-items:center';
+    const name = document.createElement('input');
+    name.type = 'text'; name.maxLength = 60; name.value = track.name;
+    name.setAttribute('aria-label', `第${track.channel + 1}声道名称`);
+    name.style.cssText = 'min-width:0;flex:1;width:100%;font:inherit';
+    const mute = document.createElement('button');
+    mute.type = 'button'; mute.className = 'btn btn-toggle';
+    mute.textContent = track.muted ? '已静音' : '静音';
+    mute.setAttribute('aria-pressed', String(!!track.muted));
+    mute.setAttribute('aria-label', `${track.name}静音`);
+    name.addEventListener('change', () => {
+      track.name = name.value.trim().slice(0,60) || `声道 ${track.channel + 1}`;
+      name.value = track.name; channelTrackPanelKey = ''; renderChannelTrackInspector(); scheduleDraftSave();
+    });
+    mute.addEventListener('click', () => {
+      track.muted = !track.muted; syncEngineFromProject(); scheduleDraftSave();
+      channelTrackPanelKey = ''; renderChannelTrackInspector();
+    });
+    const label = document.createElement('label'); label.className = 'threshold';
+    const channel = document.createElement('span');
+    channel.textContent = track.channel === 0 ? '左' : track.channel === 1 ? '右' : `声道${track.channel+1}`;
+    const gain = document.createElement('input'); gain.type = 'range'; gain.min = '-60'; gain.max = '12'; gain.step = '0.5'; gain.value = String(track.gainDb ?? 0);
+    gain.setAttribute('aria-label', `${track.name}音量`);
+    const value = document.createElement('span'); value.textContent = formatTrackGainDb(track.gainDb ?? 0);
+    gain.addEventListener('input', () => {
+      track.gainDb = Math.max(-60, Math.min(12, Number(gain.value)));
+      value.textContent = formatTrackGainDb(track.gainDb);
+      syncEngineFromProject(); scheduleDraftSave();
+    });
+    gain.addEventListener('wheel', e => e.preventDefault(), {passive:false});
+    label.append(channel,gain,value); head.append(name,mute); row.append(head,label); list.append(row);
+  }
+}
+document.querySelector('#btn-split-channels').addEventListener('click', () => {
+  const clip = getActiveClip(); if (!clip || clip.buffer.numberOfChannels < 2 || clip.channelTracks?.length) return;
+  clip.channelTracks = Array.from({length:clip.buffer.numberOfChannels}, (_,channel) => ({
+    id:`channel-${channel}`,name:channel === 0 ? '左声道人声' : channel === 1 ? '右声道人声' : `声道 ${channel+1}`,channel,gainDb:0,muted:false
+  }));
+  syncEngineFromProject(); scheduleDraftSave(); renderChannelTrackInspector();
+  toast('已启用独立声道调音；文字剪辑仍同步作用于全部人声');
+});
+document.querySelector('#btn-link-channel-settings').addEventListener('click', () => {
+  const clip = getActiveClip(); if (!clip?.channelTracks?.length || !project) return;
+  let applied = 0;
+  for (const other of project.clips) {
+    if (other === clip || other.buffer.numberOfChannels !== clip.buffer.numberOfChannels) continue;
+    other.channelTracks = clip.channelTracks.map(track => ({...track})); applied++;
+  }
+  syncEngineFromProject(); scheduleDraftSave();
+  toast(`已将声道名称、音量和静音应用到另外 ${applied} 个人声片段；配乐不变`);
+});
+let syncedTrackPanelKey = '';
+let syncedTrackImportBusy = false;
+let syncedTrackImportClipId = null;
+function renderSyncedTrackInspector() {
+  const clip = getActiveClip();
+  const button = document.querySelector('#btn-import-synced-track');
+  button.disabled = !clip || syncedTrackImportBusy;
+  button.textContent = syncedTrackImportBusy ? '正在本机解码音轨…' : '导入同步音轨';
+  const tracks = clip?.syncedTracks ?? [];
+  const key = JSON.stringify([clip?.id, tracks.map(t => [t.id,t.name,t.gainDb,t.muted,t.buffer?.duration])]);
+  if (key === syncedTrackPanelKey) return;
+  syncedTrackPanelKey = key;
+  const list = document.querySelector('#synced-tracks-list'); list.replaceChildren();
+  for (const track of tracks) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--border,#ddd)';
+    const head = document.createElement('div'); head.style.cssText = 'display:flex;gap:8px;align-items:center';
+    const name = document.createElement('input'); name.type = 'text'; name.maxLength=60; name.value=track.name;
+    name.setAttribute('aria-label', `${track.name}同步音轨名称`); name.style.cssText='min-width:0;flex:1;width:100%;font:inherit';
+    name.addEventListener('change', () => {
+      track.name=name.value.trim().slice(0,60)||'同步音轨'; name.value=track.name;
+      syncedTrackPanelKey='';renderSyncedTrackInspector();scheduleDraftSave();
+    });
+    const mute=document.createElement('button');mute.type='button';mute.className='btn btn-toggle';
+    mute.textContent=track.muted?'已静音':'静音';mute.setAttribute('aria-pressed',String(!!track.muted));mute.setAttribute('aria-label',`${track.name}静音`);
+    mute.addEventListener('click',()=>{track.muted=!track.muted;syncEngineFromProject();scheduleDraftSave();syncedTrackPanelKey='';renderSyncedTrackInspector();});
+    head.append(name,mute);
+    const label=document.createElement('label');label.className='threshold';
+    const text=document.createElement('span');text.textContent='音量';
+    const gain=document.createElement('input');gain.type='range';gain.min='-60';gain.max='12';gain.step='0.5';gain.value=String(track.gainDb??0);gain.setAttribute('aria-label',`${track.name}音量`);
+    const value=document.createElement('span');value.textContent=formatTrackGainDb(track.gainDb??0);
+    gain.addEventListener('input',()=>{track.gainDb=Math.max(-60,Math.min(12,Number(gain.value)));value.textContent=formatTrackGainDb(track.gainDb);syncEngineFromProject();scheduleDraftSave();});
+    gain.addEventListener('wheel',e=>e.preventDefault(),{passive:false});label.append(text,gain,value);
+    const footer=document.createElement('div');footer.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
+    const info=document.createElement('span');info.className='hint';
+    info.textContent=`${fmt(track.buffer.duration)} · ${track.buffer.numberOfChannels} 声道 · 原音 0 秒对齐`;
+    const remove=document.createElement('button');remove.type='button';remove.className='btn';remove.textContent='移除';remove.setAttribute('aria-label',`移除${track.name}同步音轨`);
+    remove.addEventListener('click',()=>{
+      clip.syncedTracks=clip.syncedTracks.filter(t=>t.id!==track.id);syncEngineFromProject();scheduleDraftSave();syncedTrackPanelKey='';renderSyncedTrackInspector();
+      toast('已从当前工程移除同步音轨，原始文件未删除');
+    });
+    footer.append(info,remove);row.append(head,label,footer);list.append(row);
+  }
+}
+document.querySelector('#btn-import-synced-track').addEventListener('click',()=>{
+  const clip=getActiveClip();if(!clip||syncedTrackImportBusy)return;
+  syncedTrackImportClipId=clip.id;document.querySelector('#file-synced-track').click();
+});
+document.querySelector('#file-synced-track').addEventListener('change',async event=>{
+  const input=event.currentTarget,files=Array.from(input.files??[]);input.value='';
+  const clip=project?.clips.find(c=>c.id===syncedTrackImportClipId);syncedTrackImportClipId=null;
+  if(!clip||!files.length||syncedTrackImportBusy)return;
+  syncedTrackImportBusy=true;renderSyncedTrackInspector();let added=0;
+  try {
+    for(const file of files){
+      try {
+        const bytes=await file.arrayBuffer();
+        const sourceBlob=new Blob([bytes],{type:file.type||'application/octet-stream'});
+        const buffer=await engine.decodeArrayBuffer(bytes);
+        if(!project?.clips.includes(clip))throw Error('原片段已被移除，请重新选择片段');
+        if(!buffer.length||!Number.isFinite(buffer.duration))throw Error('音轨没有有效音频');
+        (clip.syncedTracks??=[]).push({id:'sync-'+crypto.randomUUID(),name:file.name.replace(/\.[^.]+$/,'').slice(0,60)||'同步音轨',buffer,sourceBlob,sourceMime:sourceBlob.type,gainDb:0,muted:false});
+        added++;syncEngineFromProject();scheduleDraftSave();
+      } catch(error){toast(`导入失败：${file.name} · ${error?.message||'无法解码'}`,6000);}
+    }
+    if(added)toast(`已为「${clip.name}」加入 ${added} 条同步音轨；从原音0秒对齐，未上传或转写`,5000);
+  } finally {syncedTrackImportBusy=false;syncedTrackPanelKey='';renderSyncedTrackInspector();}
+});
 function renderSpeakerInspector() {
   const clip=getActiveClip(), speakers=listSpeakers(clip?.words || []), job=clip && speakerJobs.get(clip.id);
   document.querySelector('#speaker-target').textContent=clip ? `「${clip.name}」 · ${speakers.length ? speakers.length+' 位说话人' : '尚无说话人标识'}` : '先选择一个片段';
@@ -1088,7 +1279,10 @@ function buildMusicDecor() {
     buffer: c.buffer,
     ranges: c.ranges,
     words: c.words,
-    gainDb: c.gainDb ?? 0
+    gainDb: c.gainDb ?? 0,
+    channelTracks: c.channelTracks,
+    syncedTracks: c.syncedTracks,
+    privacyRanges: c.privacyRanges, privacyMaskStyle: c.privacyMaskStyle
   }));
   const mix = buildMixSchedule(scheduleClips,project.music);
   const timedWords = mixedWords(scheduleClips,mix);
@@ -2567,7 +2761,8 @@ function copySelectedWords() {
     words: mapped,
     cleanBuffer: gluedClean.buffer,
     playBuffer: gluedPlay.buffer,
-    plainText
+    plainText,
+    hasSyncedTracks: !!clip.syncedTracks?.length
   };
   try {
     void navigator.clipboard?.writeText(plainText);
@@ -2618,6 +2813,10 @@ function pasteWordsAtAnchor(forceStart = false) {
   const clip = (activeWordId ? findClipByWordId(activeWordId) : null) ?? getActiveClip();
   if (!clip) {
     toast("请先点一下要粘贴到的字，或点开头的 | 光标");
+    return false;
+  }
+  if (clip.syncedTracks?.length || wordClipboard.hasSyncedTracks) {
+    toast("带同步音轨的音频复制粘贴暂不支持，以免音轨错位；仍可同步删字、恢复和调整音量", 6000);
     return false;
   }
   const { insertAt, editInsertAt } = resolvePasteInsert(clip, forceStart);
@@ -2887,6 +3086,7 @@ function travelHistory(redo) {
   const current = clipSnapshot(clip);
   const snap = redo ? undo.redo(current) : undo.pop(current);
   if (!snap) return;
+  for(const saved of snap.privacyStyles??[]){const target=project.clips.find(c=>c.id===saved.clipId);if(target)target.privacyMaskStyle=saved.style;}
   clip.words = cloneWords(snap.words);
   clip.ranges = cloneRanges(snap.ranges);
   clip.audioOrder = snap.audioOrder?.map(r => ({...r}));
@@ -3384,7 +3584,10 @@ function projectTimeForMusic(m) {
     buffer: c.buffer,
     ranges: c.ranges,
     words: c.words,
-    gainDb: c.gainDb ?? 0
+    gainDb: c.gainDb ?? 0,
+    channelTracks: c.channelTracks,
+    syncedTracks: c.syncedTracks,
+    privacyRanges: c.privacyRanges, privacyMaskStyle: c.privacyMaskStyle
   }));
   const mix = buildMixSchedule(
     scheduleClips,
@@ -3601,7 +3804,7 @@ el.exportAudio.addEventListener("click", async () => {
     const duration=project.clips.reduce((n,c)=>n+c.ranges.reduce((v,r)=>v+r.end-r.start,0),0);
     if(duration>600)throw Error('整期音频需要本机导出服务，请从本机地址打开工程');
     showExportNotice('正在生成 WAV…',true);
-    const scheduleClips=project.clips.map(c=>({id:c.id,buffer:c.buffer,ranges:c.ranges,words:c.words,gainDb:c.gainDb??0}));
+    const scheduleClips=project.clips.map(c=>({id:c.id,buffer:c.buffer,ranges:c.ranges,words:c.words,gainDb:c.gainDb??0,channelTracks:c.channelTracks,syncedTracks:c.syncedTracks,privacyRanges:c.privacyRanges,privacyMaskStyle:c.privacyMaskStyle}));
     const blob=await exportMixedWav(scheduleClips,project.music??[],dbToLinear(project.gainDb),project.speechRate??1,engine.getRenderSampleRate());
     downloadBlob(blob,`${project.audioName}-edited.wav`);exportBusy=false;showExportNotice('WAV 已生成，已请求浏览器下载');
   } catch(e){exportBusy=false;showExportNotice(`导出失败：${e instanceof Error?e.message:String(e)}`);}

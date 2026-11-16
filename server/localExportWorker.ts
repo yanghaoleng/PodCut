@@ -1,3 +1,5 @@
+import {privacySample} from '../src/audio/privacyMask';
+import {sampleChannelGain} from '../src/audio/channelMix';
 /** Disk-backed rendering. All large audio reads/writes are bounded blocks. */
 import {open,readFile,writeFile,rename,mkdir,rm,stat} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -43,7 +45,7 @@ async function main(){
   await run(args);const size=(await stat(file)).size;
   const b={duration:size/(4*channels*sr),sampleRate:sr,numberOfChannels:2,file};cache.set(key,b);return b;
  }
- const clips=[];for(const c of p.clips){clips.push({...c,buffer:await decode(c),ranges:c.ranges});await status('准备音频',2+8*clips.length/p.clips.length);}
+ const clips=[];for(const c of p.clips){const syncedTracks=[];for(const t of c.syncedTracks??[])syncedTracks.push({...t,buffer:await decode(t)});clips.push({...c,buffer:await decode(c),syncedTracks,ranges:c.ranges});await status('准备音频',2+8*clips.length/p.clips.length);}
  const music=[];for(const m of p.music??[]){music.push({...m,buffer:await decode(m,true)});}
  const speed=normalizeSpeechRate(p.speechRate),mix=buildMixSchedule(clips as any,music as any,dbToLinear(p.gainDb??0)),map=speechTempoMap(mix,speed);
  const frames=Math.ceil(tempoDuration(mix,speed)*sr);if(!frames||frames>sr*86400)throw Error('导出时长无效');
@@ -60,10 +62,10 @@ async function main(){
    if(voiceFile){const bytes=Buffer.alloc(n*8);await(await handle(voiceFile)).read(bytes,0,bytes.length,pos*8);data.set(new Float32Array(bytes.buffer,bytes.byteOffset,n*2));}
    for(const s of sources){
     const dur=Math.floor(s.duration*sr),from=Math.max(pos,s.start),to=Math.min(pos+n,s.start+dur);if(to<=from)continue;
-    const bytes=Buffer.alloc((to-from)*8);await(await handle(s.buffer.file)).read(bytes,0,bytes.length,(Math.floor(s.offset*sr)+from-s.start)*8);
-    const pcm=new Float32Array(bytes.buffer,bytes.byteOffset,bytes.length/4);
+    const bytes=Buffer.alloc((to-from)*8);if(!s.privacyTone)await(await handle(s.buffer.file)).read(bytes,0,bytes.length,(Math.floor(s.offset*sr)+from-s.start)*8);
+    const pcm=new Float32Array(bytes.buffer,bytes.byteOffset,bytes.length/4);if(s.privacyTone)for(let j=0;j<to-from;j++){const v=privacySample(s.privacyTone,(from-s.start+j)/sr,s.duration);pcm[j*2]=v;pcm[j*2+1]=v;}
     const fi=s.role==='speech'?(s.offset>.0001?SPLICE_FADE_SEC:0):(s.fadeInSec??0),fo=s.role==='speech'?(s.offset+s.duration<s.buffer.duration-.0001?SPLICE_FADE_SEC:0):(s.fadeOutSec??0);
-    for(let i=0;i<to-from;i++){const gain=s.gainLinear*fadeEnvelopeAt((from-s.start+i)/sr,s.duration,fi,fo),at=(from-pos+i)*2;data[at]+=pcm[i*2]*gain;data[at+1]+=pcm[i*2+1]*gain;}
+    for(let i=0;i<to-from;i++){const gain=s.gainLinear*fadeEnvelopeAt((from-s.start+i)/sr,s.duration,fi,fo),at=(from-pos+i)*2;data[at]+=pcm[i*2]*gain*sampleChannelGain(s.channelGains,0);data[at+1]+=pcm[i*2+1]*gain*sampleChannelGain(s.channelGains,1);}
    }
    for(const v of data){if(!Number.isFinite(v))throw Error('音频含无效采样');peak=Math.max(peak,Math.abs(v));}
    await out.write(Buffer.from(data.buffer));

@@ -20,7 +20,7 @@
     "test:speakers": "node scripts/test-speakers.mjs",
     "dev:opensource": "vite --host 127.0.0.1 --port 5188 --strictPort",
     "check:release": "node tools/check-release.mjs",
-    "test:smoke": "npm run test:regressions && npm run test:agent && npm run test:speakers && npm run test:paste && npm run test:history && node scripts/test-publication-transcript.mjs && node scripts/test-breaths.mjs && node scripts/test-deletion-audio.mjs && node scripts/test-local-service.mjs",
+    "test:smoke": "npm run test:regressions && npm run test:agent && npm run test:speakers && npm run test:paste && npm run test:history && node scripts/test-publication-transcript.mjs && node scripts/test-breaths.mjs && node scripts/test-deletion-audio.mjs && node scripts/test-local-service.mjs && npm run test:multitrack && npm run test:privacy",
     "doctor": "node tools/doctor.mjs",
     "licenses:collect": "node tools/collect-third-party.mjs",
     "test:deletion": "node scripts/test-edit-regressions.mjs && node scripts/test-deletion-audio.mjs",
@@ -32,7 +32,9 @@
     "service:status": "node scripts/manage-service.mjs status",
     "service:uninstall": "node scripts/manage-service.mjs uninstall",
     "test:service": "node scripts/test-local-service.mjs",
-    "test:service:integration": "node scripts/test-service-recovery.mjs"
+    "test:service:integration": "node scripts/test-service-recovery.mjs",
+    "test:multitrack": "node scripts/test-synced-tracks.mjs && node scripts/test-multitrack-persistence.mjs && node scripts/test-channel-track-ui.mjs",
+    "test:privacy": "node scripts/test-privacy-mask.mjs && node scripts/test-privacy-ui.mjs && node scripts/test-multitrack-persistence.mjs"
   },
   "devDependencies": {
     "typescript": "~5.7.2",

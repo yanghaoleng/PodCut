@@ -1,3 +1,4 @@
+import {connectChannelGains} from './channelMix';
 import type { MixSchedule, MixSource } from './mixSchedule';
 import { bakeFadedBufferSlice } from './mixSchedule';
 import { speechTempoMap, tempoDuration } from './speechTempo';
@@ -6,7 +7,7 @@ import { SPLICE_FADE_SEC } from './splice';
 
 function sourceNode(ctx:OfflineAudioContext,src:MixSource,dest:AudioNode,rate:number,when:number){
   const speech=src.role==='speech',source=ctx.createBufferSource(),gain=ctx.createGain();
-  gain.gain.value=src.gainLinear;source.connect(gain);gain.connect(dest);
+  gain.gain.value=src.gainLinear;connectChannelGains(ctx,source,gain,src.channelGains);gain.connect(dest);
   const fadeIn=speech?(src.offset>.0001?SPLICE_FADE_SEC:0):(src.fadeInSec??0);
   const fadeOut=speech?(src.offset+src.duration<src.buffer.duration-.0001?SPLICE_FADE_SEC:0):(src.fadeOutSec??0);
   source.buffer=fadeIn||fadeOut?bakeFadedBufferSlice(ctx,src.buffer,src.offset,src.duration,fadeIn,fadeOut,src.duration,0):src.buffer;

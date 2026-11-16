@@ -1,3 +1,4 @@
+import {sampleChannelGain} from './channelMix';
 import { ContinuousResampler, SpeechPitchCorrector } from './continuousResampler';
 import type { MixSchedule } from './mixSchedule';
 import { speechTempoMap } from './speechTempo';
@@ -13,7 +14,9 @@ export async function renderTempoSpeech(mix:MixSchedule, speed:number, sampleRat
   const map=speechTempoMap(mix,speed);
   const sources=mix.sources.filter(s=>s.role==='speech').sort((a,b)=>a.whenEdit-b.whenEdit);
   const groups:typeof sources[]=[];
-  for(const s of sources){const g=groups.at(-1),last=g?.at(-1);if(last && Math.abs(last.whenEdit+last.duration-s.whenEdit)<1/sampleRate)g!.push(s);else groups.push([s]);}
+  const lanes=new Map<string,typeof sources>();
+  for(const s of sources){const key=s.laneId??'primary';if(!lanes.has(key))lanes.set(key,[]);lanes.get(key)!.push(s);}
+  for(const lane of lanes.values()){let g:typeof sources=[];for(const s of lane){const last=g.at(-1);if(last&&Math.abs(last.whenEdit+last.duration-s.whenEdit)<1/sampleRate)g.push(s);else {g=[s];groups.push(g);}}}
   let batches=0;
   for(const group of groups){
     const first=group[0]!,last=group.at(-1)!;
@@ -54,8 +57,8 @@ export async function renderTempoSpeech(mix:MixSchedule, speed:number, sampleRat
         for(let i=0;i<n;i++){
           const t=(pos+i)/sampleRate,position=(src.offset+t)*buffer.sampleRate,at=Math.floor(position),fraction=position-at;
           const amp=gain*spliceGain(t,(length-1)/sampleRate,src.offset>.0001,src.offset+src.duration<buffer.duration-.0001);
-          pcm[i*2]=((left[at]??0)*(1-fraction)+(left[at+1]??left[at]??0)*fraction)*amp;
-          pcm[i*2+1]=((right[at]??0)*(1-fraction)+(right[at+1]??right[at]??0)*fraction)*amp;
+          pcm[i*2]=((left[at]??0)*(1-fraction)+(left[at+1]??left[at]??0)*fraction)*amp*sampleChannelGain(src.channelGains,0);
+          pcm[i*2+1]=((right[at]??0)*(1-fraction)+(right[at+1]??right[at]??0)*fraction)*amp*sampleChannelGain(src.channelGains,1);
         }
         sourceRate.inputBuffer.putSamples(pcm);drain();
         if(++batches%64===0)await new Promise<void>(resolve=>setTimeout(resolve,0));

@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PodCut</title>
-    <script>try{const q=new URLSearchParams(location.search).get('theme');const t=q==='light'||q==='dark'?q:localStorage.getItem('podcut:theme');document.documentElement.dataset.theme=t==='dark'?'dark':'light';}catch{document.documentElement.dataset.theme='light';}</script>
+    <script>const t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t;</script>
+    <link rel="icon" type="image/png" sizes="64x64" href="/brand/favicon-light.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/brand/favicon-dark.png" media="(prefers-color-scheme: dark)" />
     <link rel="stylesheet" href="/fonts/ibm-plex-sans.css" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>" />
   </head>
   <body>
     <div id="app"></div>

@@ -1,3 +1,4 @@
+import {sampleChannelGain} from './channelMix';
 import { normalizeSpeechRate, speechTempoMap, tempoDuration } from './speechTempo';
 import { renderTempoSpeech } from './tempoExport';
 import { SPLICE_FADE_SEC, spliceGain } from './splice';
@@ -149,13 +150,13 @@ export async function exportMixedWav(
           const srcIdx = srcStart + Math.floor((i * srcCount) / Math.max(1, outCount));
           sample = srcIdx >= 0 && srcIdx < srcCh.length ? srcCh[srcIdx]! : 0;
         }
-        let amp = g;
+        let amp = g * sampleChannelGain(src.channelGains,c);
         if (useFade) {
           const localSec =
             rate === sampleRate
               ? i / sampleRate
               : (i / Math.max(1, outCount)) * src.duration;
-          amp = g * (src.role === "speech" ? spliceGain(localSec, (outCount - 1) / sampleRate, fadeIn > 0, fadeOut > 0) : fadeEnvelopeAt(localSec, src.duration, fadeIn, fadeOut));
+          amp *= (src.role === "speech" ? spliceGain(localSec, (outCount - 1) / sampleRate, fadeIn > 0, fadeOut > 0) : fadeEnvelopeAt(localSec, src.duration, fadeIn, fadeOut));
         }
         dest[di] = dest[di]! + sample * amp;
       }

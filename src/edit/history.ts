@@ -4,6 +4,7 @@ import { cloneRanges } from './timeline';
 function cloneSnapshot(snapshot: Snapshot): Snapshot {
   return {
     clipId: snapshot.clipId,
+    privacyStyles: snapshot.privacyStyles?.map(s=>({...s})),
     words: snapshot.words.map(word => ({ ...word, ...(word.removedAudio ? { removedAudio: cloneRanges(word.removedAudio) } : {}) })),
     ranges: cloneRanges(snapshot.ranges),
     audioOrder: snapshot.audioOrder?.map(r => ({ ...r })),

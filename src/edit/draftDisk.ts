@@ -37,6 +37,9 @@ export async function saveDiskDraft(payload: DraftPayload | null): Promise<boole
     for (const clip of payload.clips) {
       if (!clip.source?.blob?.size && !(clip.clean?.channels?.length && clip.current?.channels?.length)) throw new Error(`缺少音频字节：${clip.name}，原草稿未覆盖`);
     }
+    for (const clip of payload.clips) for (const track of clip.syncedTracks ?? []) {
+      if (!track.source?.blob?.size && !track.buffer?.channels?.length) throw new Error(`同步音轨缺少音频字节：${track.name}，原草稿未覆盖`);
+    }
     for (const music of payload.music) {
       if (!music.source?.blob?.size && !music.buffer?.channels?.length) throw new Error(`配乐缺少音频字节：${music.name}`);
     }

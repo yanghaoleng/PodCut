@@ -1,3 +1,4 @@
+import {connectChannelGains} from './channelMix';
 import { speechTempoMap, tempoDuration } from './speechTempo';
 import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
 import processorUrl from './speechProcessor?worker&url';
@@ -928,7 +929,7 @@ export class AudioEngine {
         // Whole slice already faded; play from 0 for full baked length.
         const g = ctx.createGain();
         g.gain.value = peak;
-        node.connect(g);
+        connectChannelGains(ctx,node,g,src.channelGains);
         g.connect(src.role==='speech' ? this.speechInput??master : master);
         prepared.push({node,when,offset:0,duration:node.buffer.duration,rate});
         this.sources.push(node);
@@ -937,7 +938,7 @@ export class AudioEngine {
         node.buffer = buffer;
         const g = ctx.createGain();
         g.gain.value = peak;
-        node.connect(g);
+        connectChannelGains(ctx,node,g,src.channelGains);
         g.connect(src.role==='speech' ? this.speechInput??master : master);
         prepared.push({node,when,offset:safeOff,duration:safeDur,rate});
         this.sources.push(node);

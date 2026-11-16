@@ -40,7 +40,7 @@ export class ProjectCatalog {
     let duration = 0;
     try {
       const buffer = (b: any, fallback = 0) => ({ duration: b?.length && b?.sampleRate ? b.length / b.sampleRate : fallback });
-      duration = tempoDuration(buildMixSchedule(clips.map((c: any) => ({ ...c, buffer: buffer(c.current, c.duration) })), music.map((m: any) => ({ ...m, buffer: buffer(m.buffer, m.outPoint || m.duration) }))) as any, p?.speechRate ?? 1);
+      duration = tempoDuration(buildMixSchedule(clips.map((c: any) => ({ ...c, buffer: buffer(c.current, c.duration), syncedTracks: c.syncedTracks?.map((t:any) => ({...t,buffer:buffer(t.buffer,t.duration)})) })), music.map((m: any) => ({ ...m, buffer: buffer(m.buffer, m.outPoint || m.duration) }))) as any, p?.speechRate ?? 1);
     } catch { duration = clips.reduce((sum: number, c: any) => sum + (c.ranges ?? []).reduce((n: number, r: any) => n + Math.max(0, r.end - r.start), 0), 0) / (p?.speechRate || 1); }
     return {
       id, name: info?.name || derivedName || '未命名剪辑', createdAt: info?.createdAt || state?.savedAt || 0,

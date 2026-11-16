@@ -39,8 +39,19 @@ export interface ClearedPause {
   end: number;
 }
 
+/** Independent controls for channels already present in a recording. */
+export interface ChannelTrack { id: string; name: string; channel: number; gainDb: number; muted?: boolean }
+/** Additional recording aligned at source time zero and cut together with its parent clip. */
+export interface SyncedAudioTrack { id: string; name: string; buffer: AudioBuffer; sourceBlob?: Blob; sourceMime?: string; gainDb: number; muted?: boolean }
+
 /** One audio segment on the concat track. */
+export type PrivacyMaskStyle = 'bleep' | 'bird' | 'low' | 'silence';
+
 export interface Clip {
+  privacyRanges?: TimeRange[];
+  privacyMaskStyle?: PrivacyMaskStyle;
+  channelTracks?: ChannelTrack[];
+  syncedTracks?: SyncedAudioTrack[];
   legacyDeletionRepairVersion?: number;
   id: string;
   name: string;
@@ -126,6 +137,7 @@ export interface TranscriptFile {
 
 /** Undo snapshot scoped to one clip. */
 export interface Snapshot {
+  privacyStyles?: Array<{clipId:string;style?:PrivacyMaskStyle}>;
   clipId: string;
   words: Word[];
   ranges: TimeRange[];
